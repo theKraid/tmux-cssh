@@ -1,0 +1,16 @@
+Package: tmux-cssh
+Version: 1.0.1-0
+Section: main/misc
+Priority: extra
+Architecture: all
+Depends: tmux
+Installed Size: 48
+Maintainer: Dennis Hafemann <dennis.hafemann@gmail.com>
+Homepage: https://plus.google.com/+DennisHafemann
+Description: TMUX with a "ClusterSSH"-like behaviour.
+ tmux is a terminal multiplexer, like e.g. screen, which gives you a
+ possibility to use multiple virtual terminal session within one real
+ terminal session. tmux-cssh (tmux-cluster-ssh) sets a comfortable and
+ easy to use functionality, clustering and synchronizing virtual tmux-sessions,
+ on top of tmux. No need for a x-server or x-forwarding. tmux-cssh works
+ just with tmux and in a low-level terminal-environment, like most server do.
