@@ -4,7 +4,7 @@ THIS_BASENAME=$(basename "$0")
 TMUX_SESSION_NAME=$THIS_BASENAME
 HOSTS=""
 USER=""
-CERTIFICATE=""
+IDENTITY=""
 FILENAME=""
 SSH_ARGS=""
 
@@ -15,7 +15,7 @@ CONFIG_SETTING_NAME=""
 
 # Outputs script syntax and help
 syntax() {
-	echo "Syntax: ${THIS_BASENAME} [-h|-u [user]|-c [path to certificate]|-sc [ssh-server-connect-string]|-sa [additional ssh arguments]|-ts [session-name]|-ns|-q|-f [filename]|-cs [name of config-parameters to use]]"
+	echo "Syntax: ${THIS_BASENAME} [-h|-u [user]|-c|--certificate|-i|--identity [path to certificate-/identity-file]|-sc [ssh-server-connect-string]|-sa [additional ssh arguments]|-ts [session-name]|-ns|-set|-q|-f [filename]|-cs [name of config-parameters to use]]"
 	echo
 
 	echo "-h | --help                                This help."
@@ -24,7 +24,8 @@ syntax() {
 	echo "-u | --user                                User to use."
 	echo
 
-	echo "-c | --certificate                         Path to ssh-certificate to use."
+	echo "-c | --certificate"
+	echo "-i | --identity                            Path to ssh key (identity/-certificate-file) to use."
 	echo
 
 	echo "-sc | --ssh-server-connect-string          SSH-connection-string, multiple."
@@ -36,6 +37,9 @@ syntax() {
 	echo "-ts | --tmux-session-name                  Alternative tmux-session-name, default: ${THIS_BASENAME}"
 	echo
 
+	echo "-set | --set-epoch-time                    Like -ts, but quickly set the current epoch time, overwrites -ts"
+	echo
+
 	echo "-ns | --new-session                        Initializes a new session, like -ts [name]."
 	echo
 
@@ -45,7 +49,7 @@ syntax() {
 	echo "-f | --filename                            Filename of textfile to get -sc connection-strings from, line separated."
 	echo
 
-	echo "-cs | --config-setting                     Name of config-settings which should be get from config-file '${HOME_CONFIG_FILENAME}'. Which can be a grep-regular expression to find the name(s)."
+	echo "-cs | --config-setting                     Name of config-settings which should be gotten from config-file '${HOME_CONFIG_FILENAME}'. This can be a grep-regular expression to find the name(s)."
 	echo
 
 	echo "* Other arguments will be interpreted as '-sc'."
@@ -69,10 +73,11 @@ analyseParameters() {
 		case "$1" in
 			-h|--help) syntax; exit;;
 			-u|--user) USER="$2"; shift;;
-			-c|--certificate) CERTIFICATE="$2"; shift;;
+			-c|--certificate|-i|--identity) IDENTITY="$2"; shift;;
 			-sc|--ssh-server-connect-string) HOSTS="${HOSTS} $2"; shift;;
 			-sa|--ssh_args) SSH_ARGS="$SSH_ARGS $2"; shift;;
 			-ts|--tmux-session-name) TMUX_SESSION_NAME="$2"; shift;;
+			-set|--set-epoch-time) TMUX_SESSION_NAME="$(date +"%s")";;
 			-ns|--new-session) TMUX_SESSION_NAME="${TMUX_SESSION_NAME}_$(date +%s)";;
 			-q|-quiet) QUIET="true";;
 			-f|--filename) FILENAME="$FILENAME $2"; shift;;
@@ -166,9 +171,9 @@ for host in ${HOSTS[@]}; do
 		connectString="${USER}@${connectString}"
 	fi
 
-	# Add certificate-part
-	if [ "${CERTIFICATE}" != "" ]; then
-		connectString="-i ${CERTIFICATE} ${connectString}"
+	# Add identity-part
+	if [ "${IDENTITY}" != "" ]; then
+		connectString="-i ${IDENTITY} ${connectString}"
 	fi
 
     # Add ssh_args-part
@@ -186,13 +191,24 @@ for host in ${HOSTS[@]}; do
 	if [ "${initTmuxCall}" == "true" ]; then
 		tmux new-session -d -s "${TMUX_SESSION_NAME}" "${connectString}"
 
-		initTmuxCall="false"
-	# Attach zu tmux-session
+    # If our initial ssh connection has failed, do not mark initTmuxCall as false since tmux will have aborted.
+    # We'll need to try to start a new tmux session for the next host.
+    if (( $(tmux ls 2> /dev/null | grep "${TMUX_SESSION_NAME}" | wc -l) > 0 )) ; then
+		  initTmuxCall="false"
+    fi
 	else
 		tmux split-window -t "${TMUX_SESSION_NAME}" "${connectString}"
-		tmux select-layout -t "${TMUX_SESSION_NAME}" tiled
 	fi
 done
+
+# If no session was able to start, say so and just exit.
+if (( $(tmux ls 2> /dev/null | grep "${TMUX_SESSION_NAME}" | wc -l) == 0 )) ; then
+  echo "All connections have failed."
+  exit 1
+fi
+
+# Tile the panes
+tmux select-layout -t "${TMUX_SESSION_NAME}" tiled
 
 # Set pane synchronisation
 tmux set-window-option -t "${TMUX_SESSION_NAME}" synchronize-panes on
