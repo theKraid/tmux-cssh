@@ -1,10 +1,10 @@
 Package: tmux-cssh
-Version: 1.0.5-1
+Version: 1.0.6-0
 Section: main/misc
 Priority: extra
 Architecture: all
 Depends: tmux
-Installed-Size: 60
+Installed-Size: 120
 Maintainer: Dennis Hafemann <dennis.hafemann@gmail.com>
 Homepage: https://plus.google.com/+DennisHafemann
 Description: TMUX with a "ClusterSSH"-like behaviour.
