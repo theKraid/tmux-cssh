@@ -6,8 +6,10 @@ HOSTS=""
 USER=""
 IDENTITY=""
 FILENAME=""
+SSH_COMMAND="ssh"
 SSH_ARGS=""
 SYNCHRONIZE_PANES="true"
+TMUX_LAYOUT="tiled"
 
 # Config-file in home directory
 CONFIG_FILENAME=".tmux-cssh"
@@ -16,7 +18,7 @@ CONFIG_SETTING_NAME=""
 
 # Outputs script syntax and help
 syntax() {
-	echo "Syntax: ${THIS_BASENAME} [-h|-u [user]|-c|--certificate|-i|--identity [path to certificate-/identity-file]|-sc [ssh-server-connect-string]|-sa [additional ssh arguments]|-ts [session-name]|-ns|-set|-q|-f [filename]|-cs [name of config-parameters to use]|[-dc/ds]]"
+	echo "Syntax: ${THIS_BASENAME} [-h|-u [user]|-c|--certificate|-i|--identity [path to certificate-/identity-file]|-sc [ssh-server-connect-string]|-sa [additional ssh arguments]|-ss,-csc [ssh-command]|-ts [session-name]|-ns|-tl [tmux-layout]|-set|-q|-f [filename]|-cs [name of config-parameters to use]|[-dc,-ds]]"
 	echo
 
 	echo "-h | --help                                This help."
@@ -35,7 +37,14 @@ syntax() {
 	echo "-sa | --ssh_args                           SSH connection arguments, used on every session."
 	echo
 
+	echo "-ss, -cs |"
+	echo "	--ssh_command, --custom-cssh-command     SSH command to use."
+	echo
+
 	echo "-ts | --tmux-session-name                  Alternative tmux-session-name, default: ${THIS_BASENAME}"
+	echo
+
+	echo "-tl | --tmuxlayout                         Use different layouts (tiled, even-vertical... ) see in man tmux for more information"
 	echo
 
 	echo "-set | --set-epoch-time                    Like -ts, but quickly set the current epoch time, overwrites -ts"
@@ -79,28 +88,41 @@ analyseParameters() {
 			-h|--help) syntax; exit;;
 			-u|--user) USER="$2"; shift;;
 			-c|--certificate|-i|--identity) IDENTITY="$2"; shift;;
-			-sc|--ssh-server-connect-string) 
-				if [ "$HOSTS" == "" ]; then
-					HOSTS="$2"
-				else
-					HOSTS="${HOSTS},$2"
+			-sc|--ssh-server-connect-string)
+				if [ "$2" != "" ]; then
+					if [ "$HOSTS" == "" ]; then
+						HOSTS="$2"
+					else
+						HOSTS="${HOSTS},$2"
+					fi
 				fi
 				shift;;
 			-sa|--ssh_args) SSH_ARGS="${SSH_ARGS} $2"; shift;;
+			-ss|-csc|--ssh_command,--custom-ssh-command) SSH_COMMAND="$2"; shift;;
 			-ts|--tmux-session-name) TMUX_SESSION_NAME="$2"; shift;;
+			-tl|--tmuxlayout)
+				case "$2" in
+					h|h) TMUX_LAYOUT="even-horizontal";;
+					v|V) TMUX_LAYOUT="even-vertical";;
+					t|T) TMUX_LAYOUT="tiled";;
+					*) TMUX_LAYOUT="$2";;
+				esac
+			shift;;
 			-set|--set-epoch-time) TMUX_SESSION_NAME="$(date +"%s")";;
 			-ns|--new-session) TMUX_SESSION_NAME="${TMUX_SESSION_NAME}_$(date +%s)";;
 			-q|-quiet) QUIET="true";;
 			-f|--filename) FILENAME="${FILENAME} $2"; shift;;
-			-cs|--config-setting) 
+			-cs|--config-setting)
 				get_parameters_from_config_settings_name "$2"
 				shift;;
 			-dc|--dont-clusterize|-ds|--dont-synchronize) SYNCHRONIZE_PANES="false";;
 			*)
-				if [ "$HOSTS" == "" ]; then
-					HOSTS="$1"
-				else
-					HOSTS="${HOSTS},$1"
+				if [ "$1" != "" ]; then
+					if [ "$HOSTS" == "" ]; then
+						HOSTS="$1"
+					else
+						HOSTS="${HOSTS},$1"
+					fi
 				fi
 			;;
 		esac
@@ -174,6 +196,13 @@ fi
 # Check main parameters
 analyseParameters "$@"
 
+# Check if SSH-Command is available
+if [ "$(which ${SSH_COMMAND})" == "" ]; then
+	echo "SSH-Command '${SSH_COMMAND}' not found via 'which'."
+
+	exit
+fi
+
 # Check if filenames with connection-strings are given
 if [ "$FILENAME" != "" ]; then
 	output "* Reading file '${FILENAME}' with host-connection-string."
@@ -215,11 +244,30 @@ initTmuxCall="true"
 IFS=","
 
 for host in ${HOSTS[@]}; do
-	connectString="${host}"
+	connectString=""
+	hostname=""
+	port=""
+
+	# Separate host and port, if given
+	if echo ${host} | grep -q ':'; then
+		# Remove port from string
+		hostname=${host/:*}
+		connectString=${hostname}
+
+		# Remove host from string
+		port=${host/*:}
+	else
+		connectString=${host}
+	fi
 
 	# Add user-part
 	if [ "${USER}" != "" ]; then
 		connectString="${USER}@${connectString}"
+	fi
+
+	# Port
+	if [ "${port}" != "" ]; then
+		connectString="-p ${port} ${connectString}"
 	fi
 
 	# Add identity-part
@@ -233,7 +281,7 @@ for host in ${HOSTS[@]}; do
 	fi
 
 	# Finalize connect-string
-	connectString="ssh ${connectString}"
+	connectString="${SSH_COMMAND} ${connectString}"
 
 	# Output
 	output "* Connecting '${connectString}'"
@@ -249,7 +297,7 @@ for host in ${HOSTS[@]}; do
     fi
 	else
     tmux split-window -t "${TMUX_SESSION_NAME}" "${connectString}" && \
-    tmux select-layout -t "${TMUX_SESSION_NAME}" tiled
+    tmux select-layout -t "${TMUX_SESSION_NAME}" "${TMUX_LAYOUT}"
 	fi
 done
 
@@ -266,4 +314,3 @@ synchronizePanes ${SYNCHRONIZE_PANES} ${TMUX_SESSION_NAME}
 
 # Attach to tmux session
 tmux attach-session -t "${TMUX_SESSION_NAME}"
-
