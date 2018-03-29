@@ -279,9 +279,9 @@ for host in ${HOSTS}; do
 		connectString="-i ${IDENTITY} ${connectString}"
 	fi
 
-    # Add ssh_args-part
+    	# Add ssh_args-part
 	if [ "${SSH_ARGS}" != "" ]; then
-		connectString="${SSH_ARGS} ${connectString}"
+		connectString="${connectString} ${SSH_ARGS}"
 	fi
 
 	# Finalize connect-string
